@@ -1,14 +1,14 @@
 {
-  "name": "dart-flutter",
-  "displayName": "Dart and Flutter",
-  "version": "1.0.5",
-  "description": "Official Claude plugin for Dart and Flutter that installs Flutter/Dart Skills and Dart MCP server for building natively compiled, visually stunning applications for mobile, web, desktop, and embedded devices from a single codebase",
+  "name": "dart-flutter-ht",
+  "displayName": "Dart and Flutter (HT fork, +LSP)",
+  "version": "1.0.5-ht.1",
+  "description": "Fork of the official dart-flutter Claude Code plugin with native Dart LSP; Dart MCP runs with --disable analysis. Installs Flutter/Dart Skills and Dart MCP server for building natively compiled, visually stunning applications for mobile, web, desktop, and embedded devices from a single codebase",
   "author": {
     "name": "Dart and Flutter",
     "url": "https://flutter.dev"
   },
-  "homepage": "https://github.com/flutter/agent-plugins",
-  "repository": "https://github.com/flutter/agent-plugins",
+  "homepage": "https://github.com/askmegit/dart-flutter-ht",
+  "repository": "https://github.com/askmegit/dart-flutter-ht",
   "license": "BSD-3-Clause",
   "keywords": [
     "flutter",
@@ -19,7 +19,9 @@
     "dart-mcp-server": {
       "command": "dart",
       "args": [
-        "mcp-server"
+        "mcp-server",
+        "--disable",
+        "analysis"
       ],
       "env": {
         "AGENT_PLUGIN": "claude-code"

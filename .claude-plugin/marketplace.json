@@ -1,14 +1,13 @@
 {
-  "name": "dart-flutter",
+  "name": "dart-flutter-ht",
   "owner": {
-    "name": "Dart and Flutter Team",
-    "email": "stores@flutter.io"
+    "name": "askmegit"
   },
-  "description": "Official Claude Marketplace for Dart and Flutter plugins",
+  "description": "Personal fork of the official Dart and Flutter Claude plugin with native Dart LSP and Dart MCP analysis disabled.",
   "plugins": [
     {
-      "name": "dart-flutter",
-      "description": "The official Claude plugin for Dart and Flutter that installs Flutter/Dart Skills and Dart MCP server for building natively compiled, visually stunning applications for mobile, web, desktop, and embedded devices from a single codebase",
+      "name": "dart-flutter-ht",
+      "description": "Fork of the official dart-flutter Claude Code plugin with native Dart LSP; Dart MCP runs with --disable analysis. Installs Flutter/Dart Skills and Dart MCP server for building natively compiled, visually stunning applications for mobile, web, desktop, and embedded devices from a single codebase",
       "category": "development",
       "tags": [
         "dart",
