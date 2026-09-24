@@ -1,0 +1,64 @@
+#!/bin/sh
+
+fvm_cache_path=${FVM_CACHE_PATH:-$HOME/fvm}
+project_dir=$PWD
+project_version=
+project_version_file=
+
+while :; do
+  if [ -f "$project_dir/.fvmrc" ]; then
+    project_version_file=$project_dir/.fvmrc
+    project_version=$(sed -n 's/.*"flutter"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$project_version_file" | sed -n '1p')
+    break
+  fi
+  if [ -f "$project_dir/.fvm/fvm_config.json" ]; then
+    project_version_file=$project_dir/.fvm/fvm_config.json
+    project_version=$(sed -n 's/.*"flutterSdkVersion"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$project_version_file" | sed -n '1p')
+    break
+  fi
+  [ "$project_dir" = / ] && break
+  project_dir=${project_dir%/*}
+  [ -n "$project_dir" ] || project_dir=/
+done
+if [ -n "$project_version_file" ] && [ -z "$project_version" ]; then
+  printf 'dart-lsp: could not parse Flutter SDK version from %s; falling back to FVM default or PATH\n' "$project_version_file" >&2
+fi
+
+pinned_dart=
+if [ -n "$project_version" ]; then
+  pinned_dart=$fvm_cache_path/versions/$project_version/bin/cache/dart-sdk/bin/dart
+fi
+default_dart=$fvm_cache_path/default/bin/cache/dart-sdk/bin/dart
+
+selected_dart=
+if [ -n "$pinned_dart" ] && [ -x "$pinned_dart" ]; then
+  selected_dart=$pinned_dart
+elif [ -x "$default_dart" ]; then
+  selected_dart=$default_dart
+else
+  selected_dart=$(command -v dart 2>/dev/null || :)
+fi
+
+if [ -z "$selected_dart" ] || [ ! -x "$selected_dart" ]; then
+  printf '%s\n' 'dart-lsp: no executable Dart SDK found (checked project FVM version, FVM default, and PATH).' >&2
+  exit 127
+fi
+
+case $selected_dart in
+  /*) ;;
+  *) selected_dart=$(cd "$(dirname "$selected_dart")" 2>/dev/null && printf '%s/%s\n' "$PWD" "$(basename "$selected_dart")") || {
+    printf '%s\n' 'dart-lsp: cannot resolve selected Dart SDK path.' >&2
+    exit 127
+  } ;;
+esac
+
+if [ -n "$pinned_dart" ] && [ ! -x "$pinned_dart" ]; then
+  printf 'dart-lsp: pinned Flutter %s SDK is not installed; falling back to %s\n' "$project_version" "$selected_dart" >&2
+fi
+
+if [ "${DART_LSP_PRINT:-}" = 1 ]; then
+  printf '%s\n' "$selected_dart"
+  exit 0
+fi
+
+exec "$selected_dart" language-server --protocol=lsp

@@ -1,0 +1,10 @@
+{
+  "dart": {
+    "command": "${CLAUDE_PLUGIN_ROOT}/bin/dart-lsp",
+    "extensionToLanguage": {
+      ".dart": "dart"
+    },
+    "startupTimeout": 120000,
+    "diagnostics": false
+  }
+}
