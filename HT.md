@@ -78,7 +78,14 @@
 
 ## 同步上游
 
-运行 `git fetch upstream && git merge upstream/main`。如有冲突，只在 `.claude-plugin/plugin.json` / `.claude-plugin/marketplace.json` 解决：保留本 fork 的 `name`、`version` 和 MCP `args`，吸收上游其他字段。合并后按上游新版本号更新 `version` 的版本前缀，并保留 `-ht.N` 后缀，例如上游从 `1.0.5` 升级时将其更新为对应的新 `X.Y.Z-ht.1`。
+分支：`main` 只镜像上游，不放本 fork 的提交；`ht` 是本 fork 的改动，也是 GitHub 默认分支（插件市场按默认分支安装）。
+
+1. 同步 `main`：GitHub 网页点 Sync fork，或 `git fetch upstream && git push origin upstream/main:main`（永远是快进）。
+2. 合进 `ht`：`git checkout ht && git merge upstream/main`。用 merge 不用 rebase，`ht` 已发布，不改写历史。
+3. 如有冲突，一般只在 `.claude-plugin/plugin.json` / `.claude-plugin/marketplace.json` / `HT.md`：保留本 fork 的 `name`、`version` 和 MCP `args`，吸收上游其他字段。按上游新版本号更新 `version` 前缀并把后缀重置为 `-ht.1`，例如上游 `1.0.6` → `1.0.6-ht.1`。
+4. 跑 `sh ht/tests/test_dart_lsp.sh && python3 -m unittest ht.tests.test_dart_lsp_idle ht.tests.test_lsp_nudge`，通过后 `git push origin ht`。
+
+本 fork 改了什么：`git log main..ht` / `git diff main...ht`。
 
 ## 安装
 
