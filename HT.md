@@ -5,8 +5,10 @@
 - `.claude-plugin/plugin.json`、`.claude-plugin/marketplace.json`：使用本 fork 的名称和仓库地址；禁用 Dart MCP 分析工具。
 - `.lsp.json`、`bin/dart-lsp`：注册原生 Dart analysis server LSP，并按项目 FVM 配置选择 SDK。
 - `bin/dart-lsp-idle`：客户端一段时间没有发消息（不含 analysis server 主动推送的通知）时关闭 analysis server 的 stdio 代理。
+- `hooks/hooks.json`、`hooks/lsp_nudge.py`：LSP-vs-grep 引导 hook，见下文「LSP 引导 hook」。
 - `ht/tests/test_dart_lsp.sh`：验证 SDK 选择与 LSP 启动行为。
 - `ht/tests/test_dart_lsp_idle.py`：验证 `bin/dart-lsp-idle` 的空闲退出逻辑。
+- `ht/tests/test_lsp_nudge.py`：验证引导 hook 的检测逻辑。
 - `HT.md`：本说明。
 
 ## 为什么拆分分析
@@ -19,6 +21,47 @@
 - 修改 `.dart` 后检查错误：在 shell 运行 `flutter analyze`。
 - 运行时错误、DTD、pub：使用 Dart MCP。
 - `.lsp.json` 设置 `diagnostics: false`，避免存量警告持续刷屏；需要诊断时主动运行 `flutter analyze`。
+
+## LSP 引导 hook
+
+2026-09-28 实测（`.omc/research/agent-lsp-trigger-patterns.md`、
+`.omc/research/lsp-missed-opportunities.md`）：几个 Flutter 会话里模型调用原生 `LSP`
+工具 0 次，同期跑了约 160 次/天的 grep；一条 CLAUDE.md 规则不起作用。研究显示比较式措辞
+（"findReferences 比 grep 更准，因为…"）+ 反合理化清单（Serena 的做法）比祈使句更有效，
+且不应拦截或改写命令——因此本仓没有做严格的 PreToolUse deny/rewrite，只做不阻塞的提示。
+
+`hooks/lsp_nudge.py`（纯 stdlib、无外部依赖）处理两类事件：
+
+- **SessionStart**：cwd 在 Dart 项目内（向上找最近的 `pubspec.yaml`）时，注入一段约
+  120 词的 `additionalContext`：LSP 各操作相对 grep 的优势、如何启动
+  （`ToolSearch select:LSP`）、反合理化清单（"文件小""grep更快""已经知道名字"等不是跳过
+  LSP 的理由），以及 grep 仍然合适的场景（字符串字面量、JSON/arb/l10n key、注释/TODO、
+  非 Dart 文件、过滤别的工具输出、未检出分支的 git 历史）。
+- **PreToolUse**（`Bash`/`Grep`/`Read`）：只在窄范围、高精度的形状上给出 ≤60 词的短提示，
+  从不 deny、从不设置 `permissionDecision`、从不改写工具输入：
+  - `Bash`/`Grep` 对 Dart 源码（`.dart` 作为真实路径/glob 后缀、`lib` 作为路径分段、
+    `--include=*.dart` / `--type dart` / `-t dart` 等标志）的 grep/rg，且至少一个模式
+    分支形似 Dart 标识符（camelCase/PascalCase、`Name(`、`class X`/`extends X`/
+    `implements X`/`with X`）时触发，按形状建议
+    `goToDefinition`/`goToImplementation`/`findReferences`。明确排除：过滤其他工具输出
+    的 grep（`flutter analyze | grep` 等）、纯 snake_case 的 JSON key、任意 `git` 子命令
+    （`git grep`/`git show`/`git log -S`/`git ls-tree`，不论有没有 ref、是不是 `origin/`
+    分支）、通用词（见脚本内 `GENERIC_WORDS`）、框架生命周期/重写方法（`fromJson`、
+    `toJson`、`setState`、`build`、`initState`、`dispose`、`copyWith`、
+    `didChangeDependencies`、`didUpdateWidget`、`notifyListeners`、`toString`、
+    `hashCode` 等，见 `FRAMEWORK_NOISE_WORDS`——这些方法到处都有重写，findReferences 噪音
+    太大）、显式指向 `.arb`/`.json`/`.yaml`/`.yml`/`.md`/`.txt` 的目标（即使路径经过
+    `lib/`，例如 `grep loginTitle lib/l10n/intl_en.arb` 或 `--include=*.json`）。
+    `Grep`/`Read` 的范围只按工具调用点名的目标路径判定（`path`/`file_path`），不回退到
+    `cwd`；`Bash` 仍按 `cwd` 判定，因为它没有结构化的目标路径。
+  - `Read` 一个 ≥250 行（行数计数到 250 即停止，提示统一说「≥250 行」而非精确行数）、
+    未指定 `offset`/`limit`、开头 8KB 内不含 NUL 字节（避免误判二进制/损坏文件）的
+    `.dart` 文件时，建议先用 `documentSymbol` 看大纲。
+  - 检测规则来自 `lsp-missed-opportunities.md`「Mechanical detectability at
+    PreToolUse time」一节，在 `ht/tests/test_lsp_nudge.py` 里用一份≥40条、逐条标注出处
+    的真实命令回放集固定验证（精度门槛 90%）。
+
+关闭：设置环境变量 `DART_LSP_NUDGE=0`（两个事件都会静默不输出）。
 
 ## SDK 选择和限制
 

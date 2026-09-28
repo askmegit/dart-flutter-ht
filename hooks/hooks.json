@@ -1,0 +1,29 @@
+{
+  "description": "Comparative LSP-vs-grep steering for Dart/Flutter sessions: a SessionStart context blurb plus narrow, non-blocking PreToolUse hints on Bash/Grep/Read. Disable with DART_LSP_NUDGE=0.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/lsp_nudge.py\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash|Grep|Read",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/lsp_nudge.py\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}
