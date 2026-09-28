@@ -1,5 +1,5 @@
 {
-  "description": "Comparative LSP-vs-grep steering for Dart/Flutter sessions: a SessionStart context blurb plus narrow, non-blocking PreToolUse hints on Bash/Grep/Read. Disable with DART_LSP_NUDGE=0.",
+  "description": "Comparative LSP-vs-grep steering for Dart/Flutter sessions: a SessionStart context blurb plus narrow, non-blocking PreToolUse hints on Bash/Grep/Read. Also an end-of-turn Dart analysis gate: tracks .dart edits and blocks Stop/SubagentStop on `dart analyze` errors introduced this turn. Disable with DART_LSP_NUDGE=0 / DART_STOP_ANALYZE=0.",
   "hooks": {
     "SessionStart": [
       {
@@ -21,6 +21,40 @@
             "type": "command",
             "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/lsp_nudge.py\"",
             "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/stop_analyze.py\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/stop_analyze.py\"",
+            "timeout": 120
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/stop_analyze.py\"",
+            "timeout": 120
           }
         ]
       }
