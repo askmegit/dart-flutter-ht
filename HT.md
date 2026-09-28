@@ -1,6 +1,6 @@
 # dart-flutter-ht
 
-这是官方 `flutter/agent-plugins` 的 `dart-flutter` 1.0.5 fork，增加原生 Dart LSP，并让 Dart MCP 以 `--disable analysis` 运行。除下列文件外，其余上游内容保持不动：
+这是官方 `flutter/agent-plugins` 的 `dart-flutter` 1.0.6 fork，增加原生 Dart LSP，并让 Dart MCP 以 `--disable analysis` 运行。除下列文件外，其余上游内容保持不动：
 
 - `.claude-plugin/plugin.json`、`.claude-plugin/marketplace.json`：使用本 fork 的名称和仓库地址；禁用 Dart MCP 分析工具。
 - `.lsp.json`、`bin/dart-lsp`：注册原生 Dart analysis server LSP，并按项目 FVM 配置选择 SDK。
