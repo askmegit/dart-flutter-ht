@@ -9,6 +9,8 @@ fvm_cache=$tmp_root/fvm
 fake_home=$tmp_root/home
 mkdir -p "$test_path" "$fake_home"
 ln -s "$(command -v sed)" "$test_path/sed"
+ln -s "$(command -v dirname)" "$test_path/dirname"
+ln -s "$(command -v python3)" "$test_path/python3"
 
 cleanup() {
   [ -d "$tmp_root" ] || return 0

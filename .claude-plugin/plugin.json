@@ -1,7 +1,7 @@
 {
   "name": "dart-flutter-ht",
   "displayName": "Dart and Flutter (HT fork, +LSP)",
-  "version": "1.0.5-ht.1",
+  "version": "1.0.5-ht.2",
   "description": "Fork of the official dart-flutter Claude Code plugin with native Dart LSP; Dart MCP runs with --disable analysis. Installs Flutter/Dart Skills and Dart MCP server for building natively compiled, visually stunning applications for mobile, web, desktop, and embedded devices from a single codebase",
   "author": {
     "name": "Dart and Flutter",

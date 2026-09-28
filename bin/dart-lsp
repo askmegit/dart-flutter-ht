@@ -61,4 +61,25 @@ if [ "${DART_LSP_PRINT:-}" = 1 ]; then
   exit 0
 fi
 
+idle_seconds=${DART_LSP_IDLE_SECONDS:-600}
+case $idle_seconds in
+  ''|*[!0-9]*)
+    printf 'dart-lsp: DART_LSP_IDLE_SECONDS=%s is not a non-negative integer; using default 600\n' "$idle_seconds" >&2
+    idle_seconds=600
+    ;;
+esac
+
+if [ "$idle_seconds" -gt 0 ]; then
+  bin_dir=$(dirname "$0")
+  idle_wrapper=$bin_dir/dart-lsp-idle
+  # `command -v python3` only proves a binary exists on PATH, not that it
+  # actually runs (e.g. macOS's Xcode CLT stub, or an unconfigured pyenv
+  # shim, both exit non-zero without doing anything useful). Actually
+  # invoke it on a no-op before trusting it.
+  if [ -f "$idle_wrapper" ] && command -v python3 >/dev/null 2>&1 && python3 -c '' >/dev/null 2>&1; then
+    exec python3 "$idle_wrapper" "$idle_seconds" "$selected_dart" language-server --protocol=lsp
+  fi
+  printf 'dart-lsp: no usable python3 on PATH (or dart-lsp-idle missing); running without idle auto-exit\n' >&2
+fi
+
 exec "$selected_dart" language-server --protocol=lsp

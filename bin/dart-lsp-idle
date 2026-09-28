@@ -1,0 +1,317 @@
+#!/usr/bin/env python3
+"""Idle-exit proxy for an LSP server over stdio.
+
+Usage: dart-lsp-idle <idle_seconds> <cmd> [args...]
+
+Spawns <cmd> as a child, pumps client stdin -> child stdin and child
+stdout -> our stdout byte-exact (child stderr inherited). Parses LSP
+base-protocol framing in both directions only to observe messages
+(never mutates them) so it can tell when the connection is idle and
+nothing is in flight, then gracefully shuts the child down and exits
+so the parent (e.g. Claude Code) can respawn it on the next call.
+
+"Idle" is measured from the client's side only: the last-activity clock
+resets on messages the client sends, not on server-originated
+notifications (those fire on disk changes -- edits, git checkout, pub
+get, builds -- regardless of whether anyone is at the keyboard). Both
+directions still gate an in-flight request: the proxy never exits while
+a client request awaits a server response, or a server request awaits
+a client response.
+"""
+import json
+import os
+import signal
+import subprocess
+import sys
+import threading
+import time
+import types
+
+SHUTDOWN_ID = "dart-lsp-idle-shutdown"
+POLL_INTERVAL = 0.2
+
+
+def log(msg):
+    sys.stderr.write("dart-lsp-idle: %s\n" % msg)
+    sys.stderr.flush()
+
+
+def read_exact(stream, n):
+    buf = b""
+    while len(buf) < n:
+        chunk = stream.read(n - len(buf))
+        if not chunk:
+            break
+        buf += chunk
+    return buf
+
+
+def read_message(stream):
+    """Read one base-protocol message. Returns (raw_bytes, body_bytes)
+    or (None, None) at EOF."""
+    headers = b""
+    while True:
+        line = stream.readline()
+        if not line:
+            return None, None
+        headers += line
+        if line in (b"\r\n", b"\n"):
+            break
+    content_length = None
+    for raw in headers.split(b"\r\n"):
+        name, sep, value = raw.partition(b":")
+        if sep and name.strip().lower() == b"content-length":
+            content_length = int(value.strip())
+    if content_length is None:
+        return headers, b""
+    body = read_exact(stream, content_length)
+    return headers + body, body
+
+
+def send_message(stream, lock, obj, timeout=None):
+    """Write one message. With a timeout, gives up and returns False
+    rather than blocking forever if the lock can't be acquired -- e.g.
+    a pump thread stuck mid-write on a full pipe. Without a timeout,
+    blocks until the lock is free (matches the old behavior for
+    callers that don't care)."""
+    body = json.dumps(obj).encode("utf-8")
+    header = ("Content-Length: %d\r\n\r\n" % len(body)).encode("ascii")
+    if timeout is None:
+        lock.acquire()
+    elif not lock.acquire(timeout=timeout):
+        return False
+    try:
+        stream.write(header + body)
+        stream.flush()
+        return True
+    finally:
+        lock.release()
+
+
+def note_pre_send(state, direction, msg):
+    """Called after parsing but before forwarding a message: records
+    client activity and tracks new in-flight requests. Must run before
+    the write so a response racing back in cannot be discarded against
+    an in-flight id that hasn't been recorded yet (which would leave a
+    stale id in the set forever, since nothing would ever remove it)."""
+    with state.lock:
+        if direction == "c2s":
+            # Idle means "the client hasn't asked for anything in a
+            # while", not "the server hasn't spoken". Server-originated
+            # notifications (publishDiagnostics, $/analyzerStatus, ...)
+            # fire whenever files change on disk -- edits, git checkout,
+            # pub get, builds -- and are unrelated to whether anyone is
+            # actually using this session; resetting the clock on those
+            # would mean a busy worktree never goes idle.
+            state.last_activity = time.time()
+        if not isinstance(msg, dict):
+            return
+        mid = msg.get("id")
+        if mid is None or "method" not in msg:
+            return
+        (state.client_inflight if direction == "c2s" else state.server_inflight).add(mid)
+
+
+def note_post_send(state, direction, msg):
+    """Called only after a response has actually been written+flushed:
+    clears its in-flight entry. Kept after the write so the idle check
+    (which requires both in-flight sets empty) can never observe "done"
+    before the response bytes have actually left for the other side."""
+    with state.lock:
+        if not isinstance(msg, dict):
+            return
+        mid = msg.get("id")
+        if mid is None or "method" in msg:
+            return
+        (state.server_inflight if direction == "c2s" else state.client_inflight).discard(mid)
+
+
+def pump(read_stream, write_stream, direction, state, eof_event, write_lock, swallow):
+    try:
+        while True:
+            if direction == "c2s":
+                with state.lock:
+                    if state.closing:
+                        return
+            try:
+                raw, body = read_message(read_stream)
+            except (ValueError, OSError) as exc:
+                log("pump(%s) read error: %r" % (direction, exc))
+                return
+            if raw is None:
+                return
+            msg = None
+            if body:
+                try:
+                    msg = json.loads(body)
+                except ValueError:
+                    msg = None
+            if swallow is not None and isinstance(msg, dict) and msg.get("id") == swallow.id and "method" not in msg:
+                swallow.event.set()
+                continue
+            if direction == "c2s":
+                with state.lock:
+                    if state.closing:
+                        # Forwarding now would race the child's stdin
+                        # being closed by the shutdown sequence. Drop
+                        # this request: the client will see the
+                        # connection close and the caller (Claude Code)
+                        # respawns a fresh server on the next call.
+                        return
+            note_pre_send(state, direction, msg)
+            try:
+                with write_lock:
+                    write_stream.write(raw)
+                    write_stream.flush()
+            except (BrokenPipeError, OSError, ValueError) as exc:
+                log("pump(%s) write error: %r" % (direction, exc))
+                return
+            note_post_send(state, direction, msg)
+    except Exception as exc:  # last-resort: never let a pump thread die silently
+        log("pump(%s) error: %r" % (direction, exc))
+    finally:
+        eof_event.set()
+
+
+def wait_then_kill(child, timeout):
+    try:
+        child.wait(timeout=timeout)
+        return
+    except subprocess.TimeoutExpired:
+        pass
+    try:
+        child.terminate()
+        child.wait(timeout=3)
+    except subprocess.TimeoutExpired:
+        child.kill()
+        child.wait()
+
+
+def finish(code):
+    # The pump threads are daemons that may be blocked mid-read/write on
+    # stdin/stdout when we decide to end the process (e.g. the client
+    # stopped draining stdout, so the s2c thread is stuck inside a
+    # blocking write() on a full pipe, holding that BufferedWriter's
+    # internal lock). sys.exit() runs normal interpreter finalization,
+    # which tries to flush/close those same buffered streams and can
+    # deadlock/abort (CPython "_enter_buffered_busy ... at interpreter
+    # shutdown") racing a daemon thread that still holds the lock.
+    # os._exit() skips finalization entirely and never touches stdout,
+    # so it can't deadlock on it either way. Only stderr is ours alone
+    # (pump threads never write to it) and every message already gets
+    # flushed right after it's written, so this is just best-effort.
+    try:
+        sys.stderr.flush()
+    except OSError:
+        pass
+    os._exit(code)
+
+
+def handle_client_eof(child):
+    try:
+        child.stdin.close()
+    except OSError:
+        pass
+    wait_then_kill(child, 10)
+    finish(child.returncode if child.returncode is not None else 1)
+
+
+def handle_child_exit(child):
+    finish(child.wait())
+
+
+def handle_idle_shutdown(child, idle_seconds, child_stdin_lock, swallow):
+    log("idle %ss, shutting down language server" % int(idle_seconds))
+    swallow.id = SHUTDOWN_ID
+    swallow.event.clear()
+    # Bound the shutdown-write lock wait: if it can't be acquired quickly
+    # (e.g. a pump thread wedged on a slow/full pipe), don't hang here --
+    # go straight to terminate/kill instead of sending a request nobody
+    # will read in time anyway.
+    try:
+        sent = send_message(child.stdin, child_stdin_lock,
+                             {"jsonrpc": "2.0", "id": SHUTDOWN_ID, "method": "shutdown"}, timeout=2)
+    except (OSError, ValueError) as exc:
+        log("shutdown request failed: %r" % exc)
+        sent = False
+    if sent:
+        swallow.event.wait(timeout=5)
+        try:
+            send_message(child.stdin, child_stdin_lock, {"jsonrpc": "2.0", "method": "exit"}, timeout=2)
+        except (OSError, ValueError) as exc:
+            log("exit notification failed: %r" % exc)
+    try:
+        child.stdin.close()
+    except OSError:
+        pass
+    wait_then_kill(child, 5)
+    finish(0)
+
+
+def main():
+    if len(sys.argv) < 3:
+        sys.stderr.write("usage: dart-lsp-idle <idle_seconds> <cmd> [args...]\n")
+        sys.exit(2)
+    idle_seconds = float(sys.argv[1])
+    cmd = sys.argv[2:]
+
+    child = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=None)
+    child_stdin_lock = threading.Lock()
+
+    state = types.SimpleNamespace(
+        lock=threading.Lock(), last_activity=time.time(),
+        client_inflight=set(), server_inflight=set(), closing=False,
+    )
+    client_eof = threading.Event()
+    server_eof = threading.Event()
+    swallow = types.SimpleNamespace(id=None, event=threading.Event())
+
+    def forward_signal(signum, _frame):
+        try:
+            child.send_signal(signum)
+        except OSError:
+            pass
+        wait_then_kill(child, 3)
+        finish(128 + signum)
+
+    signal.signal(signal.SIGTERM, forward_signal)
+    signal.signal(signal.SIGINT, forward_signal)
+
+    threading.Thread(
+        target=pump,
+        args=(sys.stdin.buffer, child.stdin, "c2s", state, client_eof, child_stdin_lock, None),
+        daemon=True,
+    ).start()
+    threading.Thread(
+        target=pump,
+        args=(child.stdout, sys.stdout.buffer, "s2c", state, server_eof, threading.Lock(), swallow),
+        daemon=True,
+    ).start()
+
+    while True:
+        if child.poll() is not None:
+            server_eof.set()
+        if client_eof.is_set():
+            handle_client_eof(child)
+            return
+        if server_eof.is_set():
+            handle_child_exit(child)
+            return
+        with state.lock:
+            idle_for = time.time() - state.last_activity
+            no_inflight = not state.client_inflight and not state.server_inflight
+            should_close = idle_seconds > 0 and idle_for >= idle_seconds and no_inflight
+            if should_close:
+                # Set atomically with the decision, under the same lock
+                # acquisition, so the c2s pump can never observe "not
+                # closing yet" and forward a request that arrives right
+                # as we start tearing the child down.
+                state.closing = True
+        if should_close:
+            handle_idle_shutdown(child, idle_seconds, child_stdin_lock, swallow)
+            return
+        time.sleep(POLL_INTERVAL)
+
+
+if __name__ == "__main__":
+    main()
