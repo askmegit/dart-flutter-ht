@@ -3,11 +3,11 @@
   "owner": {
     "name": "askmegit"
   },
-  "description": "Personal fork of the official Dart and Flutter Claude plugin with native Dart LSP and Dart MCP analysis disabled.",
+  "description": "Personal fork of official Dart and Flutter with pinned Dart MCP and native Claude Dart LSP.",
   "plugins": [
     {
       "name": "dart-flutter-ht",
-      "description": "Fork of the official dart-flutter Claude Code plugin with native Dart LSP; Dart MCP runs with --disable analysis. Installs Flutter/Dart Skills and Dart MCP server for building natively compiled, visually stunning applications for mobile, web, desktop, and embedded devices from a single codebase",
+      "description": "Official Flutter skills, pinned Dart MCP 1.2.2, and native Dart LSP for Claude.",
       "category": "development",
       "tags": [
         "dart",

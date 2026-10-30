@@ -1,8 +1,9 @@
 # dart-flutter-ht
 
-这是官方 `flutter/agent-plugins` 的 `dart-flutter` 1.0.6 fork，增加原生 Dart LSP，并让 Dart MCP 以 `--disable analysis` 运行。除下列文件外，其余上游内容保持不动：
+这是官方 `flutter/agent-plugins` 的 `dart-flutter` 1.0.7 fork（`1.0.7-ht.1`），增加原生 Dart LSP，固定官方 `dart_mcp_server` 1.2.2；Claude 的 MCP 以 `--disable analysis` 运行。除下列文件外，其余上游内容保持不动：
 
-- `.claude-plugin/plugin.json`、`.claude-plugin/marketplace.json`：使用本 fork 的名称和仓库地址；禁用 Dart MCP 分析工具。
+- `.claude-plugin/plugin.json`、`.claude-plugin/marketplace.json`、`.codex-plugin/plugin.json`：fork 标识和固定 MCP 启动入口；Claude 禁用 MCP 分析，Codex 保留分析。
+- `bin/dart-mcp`、`ht/tests/test_dart_mcp.py`：固定包版本、隔离缓存和启动回归。
 - `.lsp.json`、`bin/dart-lsp`：注册原生 Dart analysis server LSP，并按项目 FVM 配置选择 SDK。
 - `bin/dart-lsp-idle`：客户端一段时间没有发消息（不含 analysis server 主动推送的通知）时关闭 analysis server 的 stdio 代理。
 - `hooks/hooks.json`、`hooks/lsp_nudge.py`：LSP-vs-grep 引导 hook，见下文「LSP 引导 hook」。
@@ -173,7 +174,21 @@ analysis server 常驻进程变孤儿。
 
 ## SDK 选择和限制
 
-`bin/dart-lsp` 按顺序选择 Dart SDK：项目 `.fvmrc` → `.fvm/fvm_config.json` → FVM default → `PATH`。Dart MCP 的 command 仍是 `PATH` 上的 `dart`，需要 Dart ≥ 3.12 才支持 `--disable` 参数；全局 FVM 切回旧版时 MCP 会启动失败。LSP 与 MCP 在不同 Claude 会话中仍各有一份 analysis server；上游 `dart-lang/sdk#62606` 尚未落地。
+`bin/dart-lsp` 按启动目录向上查找 SDK：`.fvmrc` → `.fvm/fvm_config.json` → FVM default → `PATH`。`bin/dart-mcp` 复用其 SDK 选择（不启动 LSP），要求 Dart ≥ 3.12，不升级业务 Flutter。Codex 传统 manifest 通过 `cwd: "."` 将启动目录解析为插件根，不能依赖项目 cwd 的 FVM 配置；通常使用 FVM default，业务根通过 MCP `roots` 注册。Claude 保留原生 LSP/MCP 分析拆分；Codex 没有本 fork 的原生 LSP 注册，因此保留 MCP 分析。
+
+### MCP 固定版本与验收
+
+SDK 自带的旧 `dart mcp-server` 可能仍是 0.1.x；`vm_service` 在官方包 1.1.0 引入。本 fork 的 Codex/Claude 入口使用官方包 **1.2.2**，不再调用旧入口。首次启动将包激活到 `${XDG_CACHE_HOME:-$HOME/.cache}/dart-flutter-ht/pub-cache`，不会覆盖用户全局 Pub 缓存；激活日志只写 stderr，失败即退出，不回退旧 MCP。首次需要可用网络/已配置的 Pub 镜像。
+
+```sh
+# 可在客户端加载前预热；从插件根运行
+./bin/dart-mcp --version       # 应输出 1.2.2
+./bin/dart-mcp --help          # 应包含 vm_service
+```
+
+版本/help 不是集成验收：加载插件后检查实际工具列表必须有 `vm_service`，再用目标 Debug App 的 VM URI 调 `getVM`；缺工具应报告配置/加载缺口，不绕 DevTools UI或自建 RPC 客户端。已有手动注册的 Dart MCP 与官方插件可能并存，先核对来源，避免同时启动；本插件不自动覆盖或移除用户注册。重启/重载插件后才会应用新入口，不能把当前旧会话当已升级。
+
+上游同步基线为 `90fa51dc9d1bd6694cee226397e08ec8193e9e69`（2026-10-26）。保留全部上游技能更新；其中新版 widget preview 指引面向 Flutter 3.47，不代表业务项目必须升级。Cursor manifest 本次仅同步上游，未迁移固定包入口；本次修复与验收范围为 Codex/Claude。
 
 ## 空闲自动退出
 

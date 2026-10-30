@@ -1,13 +1,13 @@
 {
-  "name": "dart-flutter",
-  "version": "1.0.6",
-  "description": "Official Codex plugin for Dart and Flutter that installs Flutter/Dart Skills and Dart MCP server for building natively compiled, visually stunning applications for mobile, web, desktop, and embedded devices from a single codebase.",
+  "name": "dart-flutter-ht",
+  "version": "1.0.7-ht.1",
+  "description": "Fork of the official Dart and Flutter plugin with pinned Dart MCP 1.2.2; Claude uses native Dart LSP with MCP analysis disabled, Codex retains MCP analysis.",
   "author": {
     "name": "Dart and Flutter",
     "url": "https://flutter.dev"
   },
-  "homepage": "https://github.com/flutter/agent-plugins",
-  "repository": "https://github.com/flutter/agent-plugins",
+  "homepage": "https://github.com/askmegit/dart-flutter-ht",
+  "repository": "https://github.com/askmegit/dart-flutter-ht",
   "license": "BSD-3-Clause",
   "keywords": [
     "flutter",
@@ -18,19 +18,8 @@
     "mcp"
   ],
   "skills": "./skills/",
-  "mcpServers": {
-    "dart-mcp-server": {
-      "command": "dart",
-      "args": [
-        "mcp-server"
-      ],
-      "env": {
-        "AGENT_PLUGIN": "codex"
-      }
-    }
-  },
   "interface": {
-    "displayName": "Dart and Flutter",
+    "displayName": "Dart and Flutter (HT fork)",
     "shortDescription": "Build and manage Dart and Flutter apps from Codex.",
     "longDescription": "Use official Dart and Flutter skills and the MCP server to develop apps, run workflows, and manage code from Codex.",
     "developerName": "Dart and Flutter",
@@ -39,6 +28,20 @@
       "Skills",
       "MCP"
     ],
-    "websiteURL": "https://flutter.dev"
+    "websiteURL": "https://flutter.dev",
+    "composerIcon": "./assets/flutter-icon.svg",
+    "logo": "./assets/flutter-logo.png",
+    "privacyPolicyURL": "https://policies.google.com/privacy",
+    "termsOfServiceURL": "https://policies.google.com/terms"
+  },
+  "mcpServers": {
+    "dart-mcp-server": {
+      "command": "./bin/dart-mcp",
+      "args": [],
+      "env": {
+        "AGENT_PLUGIN": "codex"
+      },
+      "cwd": "."
+    }
   }
 }

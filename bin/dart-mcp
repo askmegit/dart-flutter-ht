@@ -1,0 +1,29 @@
+#!/bin/sh
+# Select the same SDK as the native LSP without starting an analysis server.
+script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd) || exit 1
+dart=$(DART_LSP_PRINT=1 "$script_dir/dart-lsp") || exit $?
+
+PUB_CACHE=${XDG_CACHE_HOME:-"$HOME/.cache"}/dart-flutter-ht/pub-cache
+export PUB_CACHE
+version=$("$dart" --version 2>&1) || {
+  printf '%s\n' 'dart-mcp: unable to determine Dart SDK version.' >&2
+  exit 1
+}
+version=$(printf '%s\n' "$version" | sed -n 's/.*version: \([0-9][0-9]*\)\.\([0-9][0-9]*\)\..*/\1 \2/p' | head -n 1)
+major=${version%% *}
+minor=${version#* }
+case $major:$minor in
+  *[!0-9:]*|:*) printf '%s\n' 'dart-mcp: unable to parse Dart SDK version; Dart 3.12 or newer is required.' >&2; exit 1 ;;
+esac
+if [ "$major" -lt 3 ] || { [ "$major" -eq 3 ] && [ "$minor" -lt 12 ]; }; then
+  printf '%s\n' 'dart-mcp: Dart 3.12 or newer is required for dart_mcp_server 1.2.2.' >&2
+  exit 1
+fi
+
+if ! "$dart" pub global list </dev/null 2>/dev/null | grep -Eq '^dart_mcp_server 1\.2\.2([[:space:]]|$)'; then
+  if ! "$dart" pub global activate dart_mcp_server 1.2.2 </dev/null >&2; then
+    printf '%s\n' 'dart-mcp: failed to activate dart_mcp_server 1.2.2.' >&2
+    exit 1
+  fi
+fi
+exec "$dart" pub global run dart_mcp_server:dart_mcp_server "$@"

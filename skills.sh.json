@@ -1,0 +1,34 @@
+{
+  "$schema": "https://skills.sh/schemas/skills.sh.json",
+  "groups": [
+    {
+      "title": "UI & Layout",
+      "description": "Responsive Flutter layouts, constraint debugging, and app localization.",
+      "skills": [
+        "flutter-build-responsive-layout",
+        "flutter-fix-layout-issues",
+        "flutter-setup-localization"
+      ]
+    },
+    {
+      "title": "Architecture & Data",
+      "description": "Layered app architecture, declarative routing, HTTP networking, and JSON serialization.",
+      "skills": [
+        "flutter-apply-architecture-best-practices",
+        "flutter-setup-declarative-routing",
+        "flutter-use-http-package",
+        "flutter-implement-json-serialization"
+      ]
+    },
+    {
+      "title": "Testing & Previews",
+      "description": "Widget tests, Flutter Driver integration tests, and interactive widget previews.",
+      "skills": [
+        "flutter-add-widget-test",
+        "flutter-add-integration-test",
+        "flutter-add-widget-preview"
+      ]
+    }
+  ],
+  "notGrouped": "bottom"
+}
