@@ -95,6 +95,9 @@ elif args[:3] == ['pub', 'global', 'run']:
         root = LAUNCHER.parents[1]
         claude = json.loads((root / '.claude-plugin/plugin.json').read_text())
         codex = json.loads((root / '.codex-plugin/plugin.json').read_text())
+        marketplace = json.loads((root / '.agents/plugins/marketplace.json').read_text())
+        self.assertEqual(marketplace['name'], codex['name'])
+        self.assertEqual([plugin['name'] for plugin in marketplace['plugins']], [codex['name']])
         self.assertEqual((claude['name'], claude['version']), ('dart-flutter-ht', '1.0.7-ht.1'))
         self.assertEqual((codex['name'], codex['version']), ('dart-flutter-ht', '1.0.7-ht.1'))
         claude_server = claude['mcpServers']['dart-mcp-server']

@@ -1,11 +1,11 @@
 {
-  "name": "dart-flutter",
+  "name": "dart-flutter-ht",
   "interface": {
-    "displayName": "Dart and Flutter"
+    "displayName": "Dart and Flutter (HT fork)"
   },
   "plugins": [
     {
-      "name": "dart-flutter",
+      "name": "dart-flutter-ht",
       "source": {
         "source": "local",
         "path": "./"
